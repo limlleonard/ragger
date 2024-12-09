@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: script.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: script.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>/**
+ * Displays a 'Working...' message with animated dots during execution.
+ * like a decorator to show 'working...' during the execution
+ * 
+ * @returns {number} The interval ID which can be used to stop the animation.
+ */
+function warte() {
+    const pWarning = document.getElementById("warning");
+    pWarning.innerText='Working      ';
+    pWarning.style.display = 'flex';
+    const dots = ['      ', '..    ', '....  ','......']; // damit warning text immer in der Mittel ist und nicht abrutscht
+    let ind_dot=0;
+    let strLoad = setInterval(function() {
+        pWarning.innerText = 'Working' + dots[ind_dot];
+        ind_dot = (ind_dot + 1) % dots.length;
+    }, 1000);
+    return strLoad
+}
+/**
+ * Stops the 'Working...' message animation and hides the warning element.
+ * 
+ * @param {number} strLoad - The interval ID returned by the `warte` function.
+ */
+function warteFertig(strLoad) {
+    clearInterval(strLoad);
+    document.getElementById("warning").style.display = 'none';
+}
+/**
+ * Displays a warning message for a set duration.
+ * @param {string} str1 - The warning message to display.
+ */
+function showWarning(str1) {
+    const pWarning = document.getElementById("warning");
+    pWarning.innerText = str1;
+    pWarning.style.display='flex';
+    setTimeout(function() {pWarning.style.display = 'none';}, 2500);
+}
+/**
+ * Selects or deselects all checkboxes for Portale.
+ * @param {number} i1 - 1 to select all checkboxes, 0 to deselect all.
+ */
+function selectAll(i1) {
+    const checkboxes = [...document.getElementsByClassName('checkbox')]; // xx ... returns an array, so can use forEach
+    checkboxes.forEach(checkbox => checkbox.checked = i1 === 1);
+}
+/**
+ * Removes a keyword element by its ID.
+ * @param {string} checkboxId - The ID of the keyword element to remove.
+ */
+const removeKW = checkboxId => document.getElementById(checkboxId).remove();
+/**
+ * Adds a new keyword by sending a POST request to the server.
+ */
+function addKW() {
+    const kw_neu = document.getElementById("add_kw").value;
+    if (!kw_neu.trim()) {
+        showWarning("Der Suchbegriff darf nicht leer sein");
+        return;
+    }
+    fetch('/add_kw', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({ kw_neu: kw_neu})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.ok) { showWarning(data.warning); } else {
+            var ctn = document.querySelector('.ctn-kw');
+            var newDiv = document.createElement('div');
+            newDiv.className = 'lst_kw ctn-line';
+            newDiv.id = data.kw_neu;
+            newDiv.innerHTML = `
+                &lt;div class="kw">
+                    &lt;input type="text" name="${data.kw_neu}" value="${data.kw_neu}" readonly>
+                    &lt;input type="button" onclick="removeKW('${data.kw_neu}')" value="Löschen" class="button">
+                &lt;/div>
+            `;
+            ctn.appendChild(newDiv);
+            document.getElementById("add_kw").value = "";
+        }
+    })
+}
+/**
+ * Updates parameters (Portal, Datum, Keyword) by sending a POST request to the server.
+ */
+async function updateVar() {
+    const von = document.getElementById("von").value, // $("#von").val(), // jQuery
+        bis = document.getElementById("bis").value,
+        speicher = document.getElementById("speicher").value,
+        lst_pt = Array.from(document.querySelectorAll('.checkbox:checked')).map(checkbox => checkbox.value),
+        lst_kw = Array.from(document.querySelectorAll(".kw input[type='text']")).map(input => input.value);
+        // lst_pt = $(".checkbox:checked").map(function() {return this.value;}).get();
+    // $.ajax({
+    //     type: "POST",
+    //     url: "/update_parameter",
+    //     data: { von: von, bis:bis, speicher:speicher, lst_pt:lst_pt},
+    //     success: function(response) {console.log(response);},
+    //     error: function(error) {console.log(error);}
+    // });
+    fetch('/update_all', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json',},
+        body: JSON.stringify({ von: von, bis:bis, speicher:speicher, lst_pt:lst_pt, lst_kw: lst_kw}),
+    })
+        .then(response => response.json())
+        .then(data => showWarning(data.warning) )
+}
+/**
+ * Call scrap in Python and show result as a table
+ */
+async function scrap() {
+    // await updateAll();
+    const strLoad=warte();
+    fetch('/scrap')
+    .then(response => response.json())
+    .then(result => {
+        if ('warning' in result) {
+            showWarning(result.warning);}
+        displayTable(result.ld);
+        warteFertig(strLoad);
+    });
+}
+/**
+ * Reloads the table data by sorting based on the first column.
+ */
+function tableReload() {
+    fetch('/sort_table', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json',},
+        body: JSON.stringify({ columnIndex: 0 }),
+    })
+    .then(response => response.json())
+    .then(result => displayTable(result.ld) );
+}
+
+// Dt
+/**
+ * Yellow select by click
+ */
+let rowYellow = new Set();
+// let rowGreen = new Set();
+// let rowRed = new Set();
+/**
+ * After download, select for the next step to summarize. There can be only one such row
+ */
+let rowBlue = 0;
+
+/**
+ * Sorts the table by a given column index.
+ * @param {number} columnIndex - The index of the column to sort by.
+ */
+function sortTable(columnIndex) { // gut zu haben: color bleibt
+    fetch('/sort_table', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json',},
+        body: JSON.stringify({ columnIndex: columnIndex }),})
+        .then(response => response.json())
+        .then(result => displayTable(result.ld) );
+}
+/**
+ * Displays data in a table.
+ * @param {Array&lt;Object>} ld - List of dictionary. idea: wenn man ein Zell in der Spalte 'Vergabestelle' klickt, wird die ganze Reihe gelb markiert, Mit einem zusätzlichen Knopf zu drücken, die ausgewählte Indizien werden nach Backend geschickt. Um die richtige Reihen wieder zu finden, muss das sortierung Kriterium getrackt werden
+ */
+function displayTable(ld) {
+    const tableContainer = document.getElementById('ctn-table');
+    tableContainer.innerHTML='';
+    const table = document.createElement('table');
+    table.classList.add('ergebnis');
+    table.id = 'tb1';
+    const tableHead = document.createElement('tr');
+    tableHead.innerHTML = `&lt;th onclick="sortTable(0)">Angebotsfrist&lt;/th>
+    &lt;th onclick="sortTable(1)">Vergabestelle&lt;/th>
+    &lt;th onclick="sortTable(2)">Titel&lt;/th>
+    &lt;th onclick="sortTable(3)">Keyword&lt;/th>
+    &lt;th onclick="sortTable(4)">Portal&lt;/th>
+    &lt;th>Nr&lt;/th>`;
+    table.appendChild(tableHead);
+
+    ld.forEach(dct1 => {
+        const tableRow = document.createElement('tr');
+        // table head counts as a row, therefore nr +1
+        tableRow.innerHTML = `&lt;tr>
+            &lt;td>${dct1["Angebotsfrist"]}&lt;/td>
+            &lt;td class="clickable-cell">${dct1["Vergabestelle"]}&lt;/td>
+            &lt;td>&lt;a href=${dct1["URL"]} target="_blank">${dct1["Titel"]}&lt;/a>&lt;/td>
+            &lt;td>${dct1["Keyword"]}&lt;/td>
+            &lt;td>${dct1["Portal"]}&lt;/td>
+            &lt;td>${dct1["nr"]+1}&lt;/td>
+        &lt;/tr>`; 
+        tableRow.addEventListener('click', function(event) {
+            if (event.target.classList.contains('clickable-cell')) {
+                toggleRowSelection(tableRow, dct1["nr"]);
+            }
+        });
+        table.appendChild(tableRow);
+    });
+    tableContainer.innerHTML = '';
+    tableContainer.appendChild(table);
+}
+/**
+ * Toggles the selection of a table row.
+ * @param {HTMLTableRowElement} row - The table row to toggle.
+ * @param {number} ind - The index of the row.
+ */
+function toggleRowSelection(row, ind) {
+    if (row.classList.contains('green')) {
+        row.classList.add('blue');
+        // remove blue from other rows
+        const table = document.querySelector('table');
+        const rows = table.querySelectorAll('tr');
+        rows.forEach((row1,ind1) => {
+            // const cellValue = row1.cells[row1.cells.length - 1].textContent.trim();
+            if (ind1-1 == rowBlue) {
+                row1.classList.remove('blue');
+                return;
+            }
+        });
+        rowBlue=ind;
+    }
+    if (rowYellow.has(ind)) { // 
+        row.classList.remove('yellow');
+        rowYellow.delete(ind);
+    } else {
+        row.classList.add('yellow');
+        rowYellow.add(ind);
+    }
+}
+/**
+ * Marks rows as downloaded or failed.
+ * @param {Array&lt;number>} downloaded - The indices of downloaded rows.
+ * @param {Array&lt;number>} failed - The indices of failed rows.
+ */
+function markRow(downloaded, failed) {
+    const table = document.querySelector('table');
+    downloaded.forEach(index => {
+        const row = table.rows[index+1];
+        row.classList.remove('yellow');
+        row.classList.add('green');
+    });
+    failed.forEach(index => {
+        const row = table.rows[index+1];
+        row.classList.remove('yellow');
+        row.classList.add('red');
+    });
+}
+/**
+ * call download in python
+ */
+function download() {
+    const strLoad=warte();
+    const table = document.querySelector('table');
+    const rows = table.querySelectorAll('tr');
+    const indices = [];
+    rows.forEach((row, index) => { // start counting from the row with th, therefore -1
+    if (row.classList.contains('yellow')) {
+        indices.push(index-1);}
+    });
+    // const selectedRowIndices = Array.from(selectedRows);
+    fetch('/download', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json',},
+        body: JSON.stringify({ selectedRows: indices }),
+    })
+    .then(response => response.json())
+    .then(result => {
+        markRow(result.downloaded, result.failed);
+        warteFertig(strLoad);
+    });
+}
+/**
+ * call 'wahl_export' selected row of the table as excel export
+ */
+function wahlExport() {
+    const table = document.querySelector('table');
+    const rows = table.querySelectorAll('tr');
+    const farben = ['red', 'yellow', 'green', 'blue'];
+    const indices = [];    
+    rows.forEach((row, index) => {
+        if (farben.some(className => row.classList.contains(className))) {
+            indices.push(index - 1);
+        }
+    });
+    fetch('/wahl_export', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json',},
+        body: JSON.stringify({ selectedRows: indices }),
+    });
+    showWarning('Ausgewählte Zeile sind exportiert');
+}
+/** this pdf is defined in app.py serve pdf, not the folder upload */
+const url0 = 'http://127.0.0.1:5000/pdf/';
+/**ob api key vorhand ist */
+var apitf=false;
+
+const dropArea = document.getElementById('drop-area');
+dropArea.addEventListener('click', () => {document.getElementById('fileElem').click();});
+dropArea.addEventListener('drop', (e) => handleFiles(e.dataTransfer.files), false);
+// dropArea.addEventListener('drop', handleDrop, false);
+['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+    dropArea.addEventListener(eventName, preventDefaults, false);
+});
+/** Prevent default behaviors for drag and drop events, which opens up pdf files in the browser */
+function preventDefaults (e) {
+    e.preventDefault();
+    e.stopPropagation();
+}
+/**
+ * Adds files to the dropdown menu.
+ * @param {FileList|string[]} filesOrFilenames - The files (click to select) or filenames (drag &amp; drop) to add.
+ * @param {FormData} [formData=null] - The form data to append the files to.
+ */
+function addFiles2Dropdown(filesOrFilenames, formData = null) {
+    const dropdown = document.getElementById('selectPDF');
+    dropdown.innerHTML='';
+    for (const file of filesOrFilenames) {
+        // Check if the item is a File object (drag and drop) or a string (click to select)
+        if (formData &amp;&amp; file instanceof File) {
+            formData.append('file', file);
+            var option = document.createElement('option'); // add name to select
+            option.value = file.name;
+            option.text = file.name;
+            dropdown.appendChild(option);
+        } else if (typeof file === 'string') {
+            var option = document.createElement('option'); // add name to select
+            option.value = file;
+            option.text = file;
+            dropdown.appendChild(option);
+        }
+    }
+    selectPDF();
+}
+/**
+ * Call 'upload' to add selected file to server folder
+ * @param {FileList} files - The files selected.
+ */
+function handleFiles(files) {
+    const formData = new FormData();
+    addFiles2Dropdown(files, formData)
+    fetch('/upload', {method: 'POST', body: formData})
+    .then(response => response.json());
+}
+/**
+ * Selects the PDF from the dropdown menu and displays it.
+ */
+function selectPDF() {
+    var selectedPDF = document.getElementById("selectPDF").value;
+    showPDF(selectedPDF, 1);
+}
+/**Remove all PDF in the server folder */
+function deletePDF() {
+    const formData = new FormData();
+    addFiles2Dropdown([], formData)
+    fetch('/delete_pdf', {method: 'POST'})
+    .then(response => response.text())
+    .then(() => {}); //location.reload();
+}
+/**
+ * Uses the downloaded PDF file from the system.
+ */
+function copyPDF() {
+    fetch('/copy_pdf', {method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({indRowBlue:rowBlue})})
+    .then(response => response.json()) // update the dropdown menu
+    .then(result => {
+        addFiles2Dropdown(result.files);
+    });
+}
+/**
+ * Call 'add_api', Adds an API key by sending it to the server.
+ */
+function addAPI() {
+    const api = document.getElementById("inputAPI").value;
+    fetch('/add_api', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({ api: api})
+    })
+    .then(response => response.json())
+    .then(result => {
+        if (result.ok) { apitf=true; }
+        showWarning(result.warning)
+        document.getElementById("inputAPI").value = "";
+    });
+}
+/**
+ * Call 'add_frage', Adds a question by sending it to the server.
+ */
+function addFrage() {
+    const ff = document.getElementById("inputFrage").value;
+    fetch('/add_frage', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({ ff: ff})
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.ok) {
+            const container = document.getElementById('ctn-qas');
+            const newDiv = document.createElement('div');
+            newDiv.className = 'qa';
+            newDiv.id = data.f1;
+            newDiv.innerHTML = `
+                &lt;div class="frage">
+                    &lt;p>${data.f1}&lt;/p>
+                    &lt;button type="button" onclick="removeQA('${data.f1}')">Löschen&lt;/button>
+                &lt;/div>
+                &lt;p>${data.f2}&lt;/p>
+            `;
+            // &lt;input type="text" name="${data.frage_neu}" value="${data.frage_neu}" readonly>
+            container.appendChild(newDiv);
+            document.getElementById("inputFrage").value = "";
+        } else {
+            showWarning(data.warning)
+        }
+    })
+    .catch(error => console.error('Error:', error));
+}
+/**
+ * Call 'remove_frage', Removes a question and its associated answers from the server and the DOM.
+ * @param {string} f1 - The ID of the question to remove.
+ */
+function removeQA(f1) {
+    document.getElementById(f1).remove();
+    fetch('/remove_frage', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({ f1: f1})
+    })
+    .then(response => response.json());
+}
+/**Call 'ask', get answer from LLM */
+function ask() {
+    if (!apitf) {
+        showWarning('Bitte erst das API key eingeben');
+    } else {
+        const strLoad=warte();
+        fetch('/ask', {method: 'POST'})
+        .then(response => response.json())
+        .then(data => {
+            const lstQA = data.lst_qa;
+            const container = document.getElementById('ctn-qas');
+            container.innerHTML='';
+            for (const [q, qp, ans] of lstQA) { // xx ans ist a list, loop it over and make for each element a antwort&amp;button pair
+                // empty the container
+                const newDiv = document.createElement('div');
+                newDiv.className = 'qa';
+                newDiv.id = q;
+                newDiv.innerHTML = `
+                    &lt;div class="frage">
+                        &lt;p>${q}&lt;/p>
+                        &lt;button type="button" onclick="vorschau(); removeQA('${q}')">Löschen&lt;/button>
+                    &lt;/div>
+                    &lt;p>${qp}&lt;/p>
+                `;
+                ans.forEach((antwort, index) => { // mehrere Antworten einfügen
+                    const antwortDiv = document.createElement('div');
+                    antwortDiv.className = 'antwort';
+                    const isChecked = index === 0 ? 'checked' : ''; // die erste Antwort checken
+                    antwortDiv.innerHTML = `
+                        &lt;input type="checkbox" class="cb-qa" id="${q}-antwort-${index}" name="${q}-antwort-${index}" ${isChecked} onchange="vorschau()">
+                        &lt;label for="${q}-antwort-${index}">${antwort}&lt;/label>
+                        &lt;button type="button" onclick="quelle('${q}', ${index})">Quelle${index + 1}&lt;/button>
+                    `;
+                    newDiv.appendChild(antwortDiv);
+                });
+                // Add the fourth antwort div for manual input
+                const manualAntwortDiv = document.createElement('div');
+                manualAntwortDiv.className = 'antwort';
+                manualAntwortDiv.innerHTML = `
+                    &lt;input type="checkbox" class="cb-qa" id="${q}-antwort-manual" name="${q}-antwort-manual" onchange="vorschau()">
+                    &lt;input type="text" class="antwort" placeholder="Manuelle Antwort">
+                `;
+                newDiv.appendChild(manualAntwortDiv);
+                container.appendChild(newDiv);
+            };
+            warteFertig(strLoad);
+            vorschau();
+        });
+    }
+}
+/**
+ * Call 'quelle', get the response, including filename, page, text, then show pdf, scroll to the right place later highlight the node
+ * @param {string} frage - The question identifier.
+ * @param {number} nrAnt - The number of the answer. */
+async function quelle(frage, nrAnt) {
+    fetch('/quelle', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'Accept': 'application/json'},
+        body: JSON.stringify({ frage: frage, nrAnt:nrAnt})
+    })
+    .then(response => response.json())
+    .then(data => {
+        // highlightName(data.filename)// change underground color of filename
+        document.getElementById('selectPDF').value=data.filename;
+        showPDF(data.filename, data.pagenr, data.text);}); // 
+}
+/**
+ * Displays the specified PDF with highlighting and page navigation.
+ * @param {string} filename - The name of the PDF file.
+ * @param {number} pagenr - The page number to display.
+ * @param {string} [text_chunk=''] - The text chunk to highlight.
+ */
+async function showPDF(filename, pagenr, text_chunk='') {
+    const url = url0 + filename;
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '../static/pdf.worker.mjs'; // pdfjs trick
+    const loadingTask = pdfjsLib.getDocument(url);
+    const pdf = await loadingTask.promise;
+    const container = document.getElementById('ctn-pdf');
+    const containerWidth = container.clientWidth;
+    const scaleMonitor = window.devicePixelRatio || 1;
+    while (container.firstChild) {container.removeChild(container.firstChild);}
+
+    for (let pageNumber = 1; pageNumber &lt;= pdf.numPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber),
+            viewport = page.getViewport({ scale: 1 }),
+            scale_ctn_vp = containerWidth / viewport.width,
+            scaledViewport = page.getViewport({ scale: scale_ctn_vp }),
+            vp_height=scaledViewport.height;
+        
+        const divPage=document.createElement("div"); //
+        divPage.style.width = Math.floor(scaledViewport.width) + "px";
+        divPage.style.height = Math.floor(scaledViewport.height) + "px";
+
+        const canvas = document.createElement("canvas");
+        canvas.width = Math.floor(scaledViewport.width * scaleMonitor);
+        canvas.height = Math.floor(scaledViewport.height * scaleMonitor);
+        canvas.style.width = Math.floor(scaledViewport.width) + "px";
+        canvas.style.height = Math.floor(scaledViewport.height) + "px";
+        const context = canvas.getContext("2d");
+
+        const transform = scaleMonitor !== 1 ? [scaleMonitor, 0, 0, scaleMonitor, 0, 0] : null;
+        const renderContext = {
+            canvasContext: context,
+            transform,
+            viewport: scaledViewport,
+        };
+        await page.render(renderContext).promise;
+        // highlight
+        const textContent = await page.getTextContent();
+        const scale_highlight=canvas.width / scaledViewport.width;
+        highlightNode(scaledViewport, scale_highlight, context, textContent, text_chunk);
+        container.appendChild(canvas);
+
+        if (pageNumber === pagenr) {
+            canvas.scrollIntoView();
+        }
+
+    // try scroll
+    // var yOffset = vp_height*pagenr;
+    // for (var i = 1; i &lt; pagenr; i++) {
+    //     yOffset += pdf.getPage(i).then(function(p) {
+    //         return p.getViewport({ scale: 1 }).height;
+    //     });
+    //     console.log(i);
+    // }
+    // console.log(yOffset);
+    // container.scrollTop = yOffset;
+
+        // Create text layer div
+        // const divText = document.createElement("div");
+        // divText.className = "textLayer";
+        // divText.style.width = canvas.style.width;
+        // divText.style.height = canvas.style.height;
+
+        // const textContent = await page.getTextContent();
+        // pdfjsLib.renderTextLayer({
+        //     textContent: textContent,
+        //     container: divText,
+        //     viewport: scaledViewport,
+        //     textDivs: []
+        // });
+        // pdfjsLib.TextLayer({
+        //     // textContent: textContent,
+        //     container: divText,
+        //     // viewport: scaledViewport,
+        //     textDivs: []
+        // });
+        // divPage.appendChild(canvas);
+        // divPage.appendChild(divText);
+        // container.appendChild(divPage);
+        // if (pageNumber === pagenr) {
+        //     divPage.scrollIntoView();
+        // }
+
+    }
+}
+/**Remove all non-alphanumeric characters and convert to lowercase */
+const normalizeText = text => text.replace(/[\W_]+/g, '').toLowerCase();
+/**
+ * Highlights the specified text in the PDF.
+ * @param {Object} viewport - The viewport of the PDF page.
+ * @param {number} scale_highlight - The scale factor for highlighting.
+ * @param {CanvasRenderingContext2D} context - The canvas rendering context.
+ * @param {Object} textContent - The text content of the PDF page.
+ * @param {string} text_chunk - The text chunk to highlight.
+ */
+function highlightNode(viewport, scale_highlight, context, textContent, text_chunk) {
+    // const normalizedHighlightText = normalizeText(highlightText);
+    textContent.items.forEach(item => {
+        const text_line = item.str;
+        const text_line_norm = normalizeText(text_line);
+
+        if (text_chunk.includes(text_line)) {
+        // if (1){
+            const tx0=pdfjsLib.Util.transform(viewport.transform, item.transform);
+            const offsetM=0;
+            
+            context.fillStyle = 'rgba(255, 255, 0, 0.3)';
+            let rect1=[tx0[4], tx0[5]-item.height, item.width, item.height];
+            let rect2 = rect1.map(value => Math.round(value * scale_highlight)); // xx
+            rect2[1]=rect2[1]-offsetM; // xx
+            context.fillRect(...rect2);
+        }
+    });
+}
+/**Display question and answer as preview */
+function vorschau() {
+    const selectedAnswersContainer = document.getElementById('ctn-vorschau');
+    selectedAnswersContainer.innerHTML = ''; // Clear previous content
+    const qaDivs = document.querySelectorAll('#ctn-qas .qa'); // Get all QA divs within the 'ctn-qas' container
+    qaDivs.forEach((qaDiv) => {
+        // Get and append the question paragraph
+        const question = qaDiv.querySelector('.frage p').innerText;
+        const questionParagraph = document.createElement('p');
+        questionParagraph.innerText = question;
+        selectedAnswersContainer.appendChild(questionParagraph);
+        // Get all checkboxes within the current QA div
+        const checkboxes = qaDiv.querySelectorAll('input[type="checkbox"]:checked');
+        // Loop through each selected checkbox
+        checkboxes.forEach((checkbox) => {
+            let answerText = '\n';
+            const label = checkbox.nextElementSibling; // Get the associated label
+            if (label &amp;&amp; label.tagName.toLowerCase() === 'label') {
+                answerText = label.innerText; // Get the label text
+            } else {
+                const input = label &amp;&amp; label.tagName.toLowerCase() === 'input' ? label : checkbox.nextElementSibling.nextElementSibling; // Get the manual input
+                answerText = input ? input.value : '';
+            }
+            // Create a new paragraph and add the answer text
+            const answerParagraph = document.createElement('p');
+            answerParagraph.innerText = answerText;
+            selectedAnswersContainer.appendChild(answerParagraph);
+        });
+        const lineBreak = document.createElement('br');
+        selectedAnswersContainer.appendChild(lineBreak);
+    });
+}
+/**Call 'qa_export', export question and answer as preview */
+function qaExport() {
+    const strLoad=warte();
+    const öffnen=document.getElementById('öffnen').checked;
+    const selectedAnswersContainer = document.getElementById('ctn-vorschau');
+    const children = selectedAnswersContainer.childNodes;
+    const answers = [];
+    children.forEach(child => {
+        if (child.nodeName === 'P') {
+            answers.push(child.innerText);
+        } else if (child.nodeName === 'BR') {
+            answers.push('');
+        }
+    });
+    fetch('/qa_export', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ergebnis: answers, öffnen: öffnen })
+    })
+    .then(response => response.json())
+    .then(data => {
+        warteFertig(strLoad);
+    });
+}
+/**Call 'open_folder', open the folder, where PDF downloaded and result exported */
+const openFolder = () => fetch('/open_folder');
+/**Not used */
+function backup_exportieren1() { // export from backend information, without frontend
+    fetch('/qa_export', {method: 'POST'})
+    .then(response => response.json())
+    .then(data => {console.log(data.message);});
+}
+/**Not used */
+function backup_downloaded_failed () {
+    const downloadedContainer = document.getElementById('downloaded-container');
+    const failedContainer = document.getElementById('failed-container');
+    downloadedContainer.innerHTML = '';
+    failedContainer.innerHTML = '';
+
+    // Create checkboxes for downloaded list
+    const title = document.createElement('h3');
+    title.textContent = 'Downloaded';
+    title.id='title-download';
+    downloadedContainer.appendChild(title);
+    result.downloaded.forEach((item, index) => {
+        const label = document.createElement('label');
+        label.setAttribute('for', `downloaded-${index}`);
+        label.textContent = item;
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.id = `downloaded-${index}`;
+        radio.name = 'downloaded';
+        radio.value = item;
+        if (index === 0) {
+            radio.checked = true; // Make the first option selected by default
+        }
+
+        downloadedContainer.appendChild(radio);
+        downloadedContainer.appendChild(label);
+        downloadedContainer.appendChild(document.createElement('br'));
+    });
+
+    // Create paragraphs with hyperlinks for failed list
+    result.failed.forEach(item => {
+        const paragraph = document.createElement('p');
+        const link = document.createElement('a');
+        link.href = item; // Assuming the item is the URL
+        link.textContent = item;
+        link.target = '_blank';
+
+        paragraph.appendChild(link);
+        failedContainer.appendChild(paragraph);
+    });
+}
+
+window.selectAll=selectAll
+window.removeKW=removeKW
+window.addKW=addKW
+window.updateVar=updateVar
+window.scrap=scrap
+window.tableReload=tableReload
+window.sortTable=sortTable
+window.download=download
+window.wahlExport=wahlExport
+window.copyPDF=copyPDF
+
+window.removeQA=removeQA; // workaround, um pdfjs zu benutzen, dieses scripts.js Datei muss eine Module sein. Aber in diesem Module, muss alle Funktionen global gemacht werden.
+window.deletePDF = deletePDF;
+window.addFrage=addFrage;
+window.addAPI=addAPI;
+window.ask=ask;
+window.showPDF=showPDF;
+window.quelle=quelle;
+window.handleFiles=handleFiles;
+window.selectPDF=selectPDF;
+window.vorschau=vorschau;
+window.openFolder=openFolder;
+window.qaExport=qaExport;
+// window.showWarning=showWarning;</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#addAPI">addAPI</a></li><li><a href="global.html#addFiles2Dropdown">addFiles2Dropdown</a></li><li><a href="global.html#addFrage">addFrage</a></li><li><a href="global.html#addKW">addKW</a></li><li><a href="global.html#apitf">apitf</a></li><li><a href="global.html#ask">ask</a></li><li><a href="global.html#backup_downloaded_failed">backup_downloaded_failed</a></li><li><a href="global.html#backup_exportieren1">backup_exportieren1</a></li><li><a href="global.html#copyPDF">copyPDF</a></li><li><a href="global.html#deletePDF">deletePDF</a></li><li><a href="global.html#displayTable">displayTable</a></li><li><a href="global.html#download">download</a></li><li><a href="global.html#handleFiles">handleFiles</a></li><li><a href="global.html#highlightNode">highlightNode</a></li><li><a href="global.html#markRow">markRow</a></li><li><a href="global.html#normalizeText">normalizeText</a></li><li><a href="global.html#openFolder">openFolder</a></li><li><a href="global.html#preventDefaults">preventDefaults</a></li><li><a href="global.html#qaExport">qaExport</a></li><li><a href="global.html#quelle">quelle</a></li><li><a href="global.html#removeKW">removeKW</a></li><li><a href="global.html#removeQA">removeQA</a></li><li><a href="global.html#rowBlue">rowBlue</a></li><li><a href="global.html#rowYellow">rowYellow</a></li><li><a href="global.html#scrap">scrap</a></li><li><a href="global.html#selectAll">selectAll</a></li><li><a href="global.html#selectPDF">selectPDF</a></li><li><a href="global.html#showPDF">showPDF</a></li><li><a href="global.html#showWarning">showWarning</a></li><li><a href="global.html#sortTable">sortTable</a></li><li><a href="global.html#tableReload">tableReload</a></li><li><a href="global.html#toggleRowSelection">toggleRowSelection</a></li><li><a href="global.html#updateVar">updateVar</a></li><li><a href="global.html#url0">url0</a></li><li><a href="global.html#vorschau">vorschau</a></li><li><a href="global.html#wahlExport">wahlExport</a></li><li><a href="global.html#warte">warte</a></li><li><a href="global.html#warteFertig">warteFertig</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 4.0.3</a> on Sun Aug 04 2024 12:36:13 GMT+0200 (heure d’été d’Europe centrale)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>

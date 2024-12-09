@@ -1,0 +1,67 @@
+<!-- Done and todoes
+links und rechts container wechseln
+Dialog format
+scroll not appear because of 'justify-content: flex-end;'. Solution: #ctn-qas1 > *:first-child {margin-top: auto;}
+
+free llm Ollama
+-->
+<!DOCTYPE html>
+<html lang="en-us">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ragger</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static',filename='style.css') }}" />
+    <script src="https://code.jquery.com/jquery-3.6.4.min.js"></script>
+    <link rel="icon" href="{{ url_for('static', filename='euch.png') }}" type="image/x-icon">
+</head>
+<body>
+    <div class="ctn0">
+        <p id="warning">(Warning)</p>
+        <div class="ctn1 ctn1-center">
+            <h2>Ragger</h2>
+        </div>
+        
+        <div class="ctn1 ctn-lr">
+            <div class="ctn-l">
+                <div id="ctn-pdf">
+                    <p>PDF Vorschau</p>
+                    <canvas id="canvas"></canvas>
+                </div>
+            </div>
+            <div class="ctn-r">
+                <div id="ctn-dragNbutton">
+                    <div id="drop-area">
+                        Drag & Drop PDF oder klicken
+                        <input type="file" id="fileElem" multiple accept="*/*" onchange="handleFiles(this.files)">
+                    </div>
+                    <button type="button" onclick="deletePDF()">PDF Löschen</button>
+                </div>
+                <div id="ctn-select">
+                    <label for="selectPDF">PDF Dateien: </label>
+                    <div id="ctn-select-rp">
+                        <select id="selectPDF" onchange="selectPDF()">
+                            {% for file in files %}
+                            <option value="{{ file }}">{{ file }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <form class="textfield" onsubmit="addAPI(); return false;">
+                    <input type="password" id="inputAPI" name="inputAPI" placeholder="API Key für ChatGPT eingeben und 'Enter' klicken" >
+                </form>
+                <div id="ctn-qas1">
+                    <div class="question"><p>Example question?</p></div>
+                    <div class="answer"><p>Example answer!</p></div>
+                </div>
+                <form class="textfield" onsubmit="frag(); return false;">
+                    <input type="text" id="inputFrage" name="inputFrage" placeholder="Eine Frage stellen und 'Enter' drücken">
+                </form>
+            </div>
+        </div>
+    </div>
+    <!-- <script type="text/javascript" src="{{ url_for('static', filename='script.js')}}"></script> -->
+    <script src="{{ url_for('static', filename='pdf.mjs') }}" type="module"></script>
+    <script src="{{ url_for('static', filename='script.js') }}" type="module"></script>
+</body>
+</html>
